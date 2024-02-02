@@ -152,7 +152,3 @@ def start(log_queue: multiprocessing.Queue):
     if WAV_FILE.exists():
         WAV_FILE.unlink()
     LOG.info("done")
-
-
-if __name__ == "__main__":
-    start()
