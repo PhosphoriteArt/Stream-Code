@@ -25,7 +25,7 @@ ME = Path(os.path.dirname(__file__))
 TITLE_PATH = DEST.joinpath("title.txt")
 ARTIST_PATH = DEST.joinpath("artist.txt")
 ALBUM_PATH = DEST.joinpath("album.txt")
-PROGRESS_PATH = ME.joinpath("res", "progress.png")
+PROGRESS_PATH = DEST.joinpath("progress.png")
 
 ARTWORK_PATH = DEST.joinpath("artwork.png")
 ARTWORK_DEFAULT_PATH = ME.joinpath("res", "default_music.png")
