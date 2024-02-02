@@ -257,13 +257,11 @@ def start():
         sleep(0.5)
     
     if TITLE_PATH.exists():
-        TITLE_PATH.unlink()
+        TITLE_PATH.write_text("")
     if ARTIST_PATH.exists():
-        ARTIST_PATH.unlink()
-    if ARTWORK_PATH.exists():
-        ARTWORK_PATH.unlink()
+        ARTIST_PATH.write_text("")
     if ALBUM_PATH.exists():
-        ALBUM_PATH.unlink()
+        ALBUM_PATH.write_text("")
     LOG.info("done")
 
 
