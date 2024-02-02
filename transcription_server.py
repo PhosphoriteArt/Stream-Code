@@ -1,15 +1,21 @@
 #!/usr/bin/env python3.9
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 from util import create_logger, create_filter
+
+import os
 import multiprocessing
 import threading
 import signal
 
 LOG = create_logger("transcription-server")
 FILTER = create_filter()
+HTML_PATH = Path(os.path.dirname(__file__)).joinpath("view_transcript.html")
 
 HOST_NAME = "localhost"
 SERVER_PORT = 8080
+with open(HTML_PATH, "rb") as f:
+    VIEW_HTML = f.read()
 
 temp_text = ""
 text_log = ""
@@ -31,35 +37,7 @@ class TranscriptServer(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-type", "text/html")
             self.end_headers()
-            self.wfile.write(
-                bytes(
-                    """
-<html>
-  <head><title>Transcription</title></head>
-  <body>
-    <p id="text"></p>
-    <script>
-      const text = document.getElementById("text");
-
-      async function updateText() {
-        try {
-          const res = await (await fetch("/text")).text();
-          text.innerText = res;
-          document.body.scrollTop = document.body.scrollHeight;
-        } catch (e) {
-          console.warn(e);
-        }
-        window.setTimeout(updateText, 750);
-      }
-
-      updateText();
-    </script>
-  </body>
-</html>
-""",
-                    "utf-8",
-                )
-            )
+            self.wfile.write(VIEW_HTML)
 
 
 web_server_mtx = threading.Lock()

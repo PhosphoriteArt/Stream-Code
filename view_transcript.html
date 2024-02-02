@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+  <head><title>Transcription</title></head>
+  <body>
+    <p id="text"></p>
+    <script>
+      const text = document.getElementById("text");
+
+      async function updateText() {
+        try {
+          const res = await (await fetch("/text")).text();
+          text.innerText = res;
+          document.body.scrollTop = document.body.scrollHeight;
+        } catch (e) {
+          console.warn(e);
+        }
+        window.setTimeout(updateText, 750);
+      }
+
+      updateText();
+    </script>
+  </body>
+</html>
