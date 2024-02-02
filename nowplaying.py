@@ -30,10 +30,10 @@ ME = Path(os.path.dirname(__file__))
 TITLE_PATH = DEST.joinpath("title.txt")
 ARTIST_PATH = DEST.joinpath("artist.txt")
 ALBUM_PATH = DEST.joinpath("album.txt")
-PROGRESS_PATH = ME.joinpath("progress.png")
+PROGRESS_PATH = ME.joinpath("res", "progress.png")
 
 ARTWORK_PATH = DEST.joinpath("artwork.png")
-ARTWORK_DEFAULT_PATH = ME.joinpath("default_music.png")
+ARTWORK_DEFAULT_PATH = ME.joinpath("res", "default_music.png")
 
 
 exit = False
@@ -100,7 +100,7 @@ class MediaInfo(ABC):
 class MediaInfoImplMacOS(MediaInfo):
     def __init__(self) -> None:
         super().__init__()
-        self._nowplaying_cli = HOME.joinpath(".local", "bin", "nowplaying-cli")
+        self._nowplaying_cli = ME.joinpath("lib", "nowplaying-cli")
         self._base_args = [str(self._nowplaying_cli.resolve()), "get"]
 
     @property
@@ -149,9 +149,6 @@ class MediaInfoImplWindows(MediaInfo):
         from winsdk.windows.media.control import GlobalSystemMediaTransportControlsSessionManager as MediaManager
 
         self._media_manager = MediaManager
-
-        self._nowplaying_cli = ME.joinpath("nowplaying-cli")
-        self._base_args = [str(self._nowplaying_cli.resolve()), "get"]
 
     # source: https://stackoverflow.com/questions/65011660/how-can-i-get-the-title-of-the-currently-playing-media-in-windows-10-with-python
     async def _get_media_info_async(self):
