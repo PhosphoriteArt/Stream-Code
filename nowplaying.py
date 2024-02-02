@@ -14,6 +14,7 @@ import daemon
 import asyncio
 import logging
 import sys
+import signal
 
 LOG = logging.getLogger("now-playing")
 LOG.setLevel(logging.DEBUG)
@@ -24,14 +25,22 @@ LOG.addHandler(handler)
 
 HOME = Path.home()
 DEST = HOME.joinpath(".stream")
+ME = Path(os.path.dirname(__file__))
 
 TITLE_PATH = DEST.joinpath("title.txt")
 ARTIST_PATH = DEST.joinpath("artist.txt")
 ALBUM_PATH = DEST.joinpath("album.txt")
-PROGRESS_PATH = DEST.joinpath("progress.png")
+PROGRESS_PATH = ME.joinpath("progress.png")
 
 ARTWORK_PATH = DEST.joinpath("artwork.png")
-ARTWORK_DEFAULT_PATH = DEST.joinpath("default_music.png")
+ARTWORK_DEFAULT_PATH = ME.joinpath("default_music.png")
+
+
+exit = False
+def on_term(*_):
+    LOG.info("shutting down now-playing")
+    global exit
+    exit = True
 
 
 def artwork_is_default():
@@ -141,7 +150,7 @@ class MediaInfoImplWindows(MediaInfo):
 
         self._media_manager = MediaManager
 
-        self._nowplaying_cli = HOME.joinpath(".local", "bin", "nowplaying-cli")
+        self._nowplaying_cli = ME.joinpath("nowplaying-cli")
         self._base_args = [str(self._nowplaying_cli.resolve()), "get"]
 
     # source: https://stackoverflow.com/questions/65011660/how-can-i-get-the-title-of-the-currently-playing-media-in-windows-10-with-python
@@ -220,13 +229,15 @@ class MediaInfoImplWindows(MediaInfo):
 
 
 def start():
+    signal.signal(signal.SIGTERM, on_term)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     DEST.mkdir(parents=True, exist_ok=True)
 
     info = MediaInfo.create()
 
     last_progress = None
     last_info = None
-    while True:
+    while not exit:
         title, artist, album = curr_info = (info.title, info.artist, info.album)
         TITLE_PATH.write_text(title)
         ARTIST_PATH.write_text(artist)
@@ -252,6 +263,16 @@ def start():
                 os.link(ARTWORK_DEFAULT_PATH, ARTWORK_PATH)
 
         sleep(0.5)
+    
+    if TITLE_PATH.exists():
+        TITLE_PATH.unlink()
+    if ARTIST_PATH.exists():
+        ARTIST_PATH.unlink()
+    if ARTWORK_PATH.exists():
+        ARTWORK_PATH.unlink()
+    if ALBUM_PATH.exists():
+        ALBUM_PATH.unlink()
+    LOG.info("nowplaying shutdown complete")
 
 
 if __name__ == "__main__":

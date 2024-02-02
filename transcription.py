@@ -8,6 +8,7 @@ import queue
 import sys
 import os
 import soundfile
+import signal
 import logging
 
 LOG = logging.getLogger("streaming-trascription")
@@ -23,10 +24,20 @@ WINDOW_S = 2
 
 NO_SPEECH_MAX = 0.2
 
+exit = False
+def on_term(*_):
+    global exit
+    LOG.info("shutting down transcription engine")
+    exit = True
+
+
 
 def start(logQueue: multiprocessing.Queue):
     sys.stderr = open(os.devnull, "w")
     import whisper
+
+    signal.signal(signal.SIGTERM, on_term)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
 
     model = whisper.load_model("base.en", in_memory=True)
     q = queue.Queue()
@@ -68,7 +79,7 @@ def start(logQueue: multiprocessing.Queue):
                 ) as sf:
                     sf.write(data)
 
-            while True:
+            while not exit:
                 receive()
 
                 if cur_len_s() >= WINDOW_S:
@@ -126,6 +137,8 @@ def start(logQueue: multiprocessing.Queue):
         LOG.warn("\nInterrupted by user")
     except Exception as e:
         LOG.error(type(e).__name__ + ": " + str(e))
+    
+    LOG.info("transcription engine shutdown complete")
 
 
 if __name__ == "__main__":

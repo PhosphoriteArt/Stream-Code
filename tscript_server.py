@@ -5,6 +5,7 @@ import logging
 import sys
 import threading
 from better_profanity import profanity
+import signal
 
 LOG = logging.getLogger("transcription-server")
 LOG.setLevel(logging.DEBUG)
@@ -84,7 +85,7 @@ textLog = ""
 textLock = threading.Lock()
 
 
-class MyServer(BaseHTTPRequestHandler):
+class TranscriptServer(BaseHTTPRequestHandler):
     def do_GET(self):
         global curText
         global textLock
@@ -112,9 +113,7 @@ class MyServer(BaseHTTPRequestHandler):
       async function updateText() {
         try {
           const res = await (await fetch("/text")).text();
-          if (res) {
-            text.innerText = res;
-          }
+          text.innerText = res;
           document.body.scrollTop = document.body.scrollHeight;
         } catch (e) {
           console.warn(e);
@@ -132,9 +131,13 @@ class MyServer(BaseHTTPRequestHandler):
             )
 
 
+webServerLock = threading.Lock()
+webServer = None
 def start_server():
-    webServer = HTTPServer((hostName, serverPort), MyServer)
-    LOG.info("Server started http://%s:%s" % (hostName, serverPort))
+    global webServer
+    with webServerLock:
+        webServer = HTTPServer((hostName, serverPort), TranscriptServer)
+        LOG.info("Server started http://%s:%s" % (hostName, serverPort))
 
     try:
         webServer.serve_forever()
@@ -142,7 +145,7 @@ def start_server():
         pass
 
     webServer.server_close()
-    LOG.info("Server stopped.")
+    LOG.info("transcript server stopped")
 
 
 def start_listener(mp_q: multiprocessing.Queue):
@@ -151,6 +154,9 @@ def start_listener(mp_q: multiprocessing.Queue):
     global textLog
     while True:
         obj = mp_q.get()
+        if "stop" in obj and obj["stop"]:
+            LOG.info("transcript-reading loop finished")
+            return
         with textLock:
             if "log" in obj:
                 textLog += obj["log"] + "\n"
@@ -165,5 +171,17 @@ def start(mp_q: multiprocessing.Queue):
     server_thread.start()
     listener_thread.start()
 
+    def on_term(*_):
+        LOG.info("shutting down transcript server")
+        mp_q.put({"stop": True})
+        with webServerLock:
+            webServer.shutdown()
+        
+
+
+    signal.signal(signal.SIGTERM, on_term)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
     server_thread.join()
     listener_thread.join()
+    LOG.info("transcript server shutdown complete")

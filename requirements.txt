@@ -1,0 +1,7 @@
+pillow
+daemon
+sounddevice
+wavio
+soundfile
+better-profanity
+openai-whisper
