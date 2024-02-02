@@ -6,6 +6,8 @@
 from pathlib import Path
 from contextlib import contextmanager
 from util import create_logger
+from whisper.audio import SAMPLE_RATE
+from io import BytesIO
 
 import multiprocessing
 import sounddevice
@@ -16,11 +18,12 @@ import sys
 import os
 import soundfile
 import signal
+import numpy as np
+import subprocess
 
 LOG = create_logger("transcription-engine")
 
 ME = Path(os.path.dirname(__file__))
-WAV_FILE = ME.joinpath(".transcript_temp.wav").resolve()
 
 # How much buffer we should leave when cutting apparently-empty transcription
 EMPTY_CUT_TO_S = 5
@@ -54,6 +57,32 @@ def silenced_stderr():
         sys.stderr = orig_stderr
 
 
+def load_audio(wav_bytes: bytes) -> np.ndarray:
+    # Remixed from whisper
+    # This launches a subprocess to decode audio while down-mixing
+    # and resampling as necessary.  Requires the ffmpeg CLI in PATH.
+    # fmt: off
+    cmd = [
+        "ffmpeg",
+        "-nostdin",
+        "-threads", "0",
+        "-i", "-",
+        "-f", "s16le",
+        "-ac", "1",
+        "-acodec", "pcm_s16le",
+        "-ar", str(SAMPLE_RATE),
+        "-"
+    ]
+    # fmt: on
+    try:
+        out = subprocess.run(cmd, capture_output=True, check=True, input=wav_bytes).stdout
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Failed to load audio: {e.stderr.decode()}") from e
+
+    return np.frombuffer(out, np.int16).flatten().astype(np.float32) / 32768.0
+
+
+
 def start(log_queue: multiprocessing.Queue):
     global exit
 
@@ -76,7 +105,7 @@ def start(log_queue: multiprocessing.Queue):
         audio_queue.put(indata.copy())
 
     try:
-        with sounddevice.InputStream(callback=audio_callback, latency=1.0, channels=1) as istream:
+        with sounddevice.InputStream(callback=audio_callback, dtype="int16", latency=1.0, channels=1) as istream:
             LOG.info(f"Readying window ({WINDOW_S} seconds)...")
 
             def time_to_samples(t):
@@ -97,21 +126,25 @@ def start(log_queue: multiprocessing.Queue):
                     except queue.Empty:
                         indata = audio_queue.get()
                         didGetAll = True
-                    audio_data = indata if audio_data is None else numpy.concatenate((audio_data, indata))
+                    audio_data = indata if audio_data is None else numpy.concatenate((audio_data, indata), dtype="int16")
 
-            def export_wav(to=str(WAV_FILE)):
+            def get_wavdata():
+                b = BytesIO()
                 with soundfile.SoundFile(
-                    file=to, mode="w", samplerate=int(istream.samplerate), channels=int(istream.channels)
+                    file=b, mode="w", format="WAV", subtype="PCM_16", endian="LITTLE", samplerate=int(istream.samplerate), channels=int(istream.channels)
                 ) as sf:
                     sf.write(audio_data)
+                return b.getvalue()
 
             while not exit:
                 receive()
 
                 if cur_len_s() >= WINDOW_S:
-                    export_wav()
 
-                    fl = whisper.load_audio(str(WAV_FILE))
+                    # I've tried, but I cannot get good transcription quality without
+                    # recording at a high sample rate, then subsequently downsampling it
+                    # with ffmpeg
+                    fl = load_audio(get_wavdata())
                     start = time.time()
                     with silenced_stderr():
                         tscript = model.transcribe(
@@ -120,7 +153,7 @@ def start(log_queue: multiprocessing.Queue):
                             condition_on_previous_text=False
                         )
                     transcription_time = round(time.time() - start, 2)
-                    audio_data_s = len(audio_data) / istream.samplerate
+                    audio_data_s = round(len(audio_data) / istream.samplerate, 2)
 
                     # Find segments that are eligible to be "committed"
                     #  (i.e. they're old enough/long away enough that they're unlikely to change).
@@ -169,6 +202,4 @@ def start(log_queue: multiprocessing.Queue):
     except Exception as e:
         LOG.error(type(e).__name__ + ": " + str(e))
     
-    if WAV_FILE.exists():
-        WAV_FILE.unlink()
     LOG.info("done")
