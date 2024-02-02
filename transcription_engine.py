@@ -57,30 +57,8 @@ def silenced_stderr():
         sys.stderr = orig_stderr
 
 
-def load_audio(wav_bytes: bytes) -> np.ndarray:
-    # Remixed from whisper
-    # This launches a subprocess to decode audio while down-mixing
-    # and resampling as necessary.  Requires the ffmpeg CLI in PATH.
-    # fmt: off
-    cmd = [
-        "ffmpeg",
-        "-nostdin",
-        "-threads", "0",
-        "-i", "-",
-        "-f", "s16le",
-        "-ac", "1",
-        "-acodec", "pcm_s16le",
-        "-ar", str(SAMPLE_RATE),
-        "-"
-    ]
-    # fmt: on
-    try:
-        out = subprocess.run(cmd, capture_output=True, check=True, input=wav_bytes).stdout
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Failed to load audio: {e.stderr.decode()}") from e
-
-    return np.frombuffer(out, np.int16).flatten().astype(np.float32) / 32768.0
-
+def transform_audio(data: np.ndarray) -> np.ndarray:
+    return data.flatten().astype(np.float32) / 32768.0
 
 
 def start(log_queue: multiprocessing.Queue):
@@ -105,7 +83,7 @@ def start(log_queue: multiprocessing.Queue):
         audio_queue.put(indata.copy())
 
     try:
-        with sounddevice.InputStream(callback=audio_callback, dtype="int16", latency=1.0, channels=1) as istream:
+        with sounddevice.InputStream(callback=audio_callback, dtype="int16", samplerate=SAMPLE_RATE, latency=1.0, channels=1) as istream:
             LOG.info(f"Readying window ({WINDOW_S} seconds)...")
 
             def time_to_samples(t):
@@ -128,23 +106,11 @@ def start(log_queue: multiprocessing.Queue):
                         didGetAll = True
                     audio_data = indata if audio_data is None else numpy.concatenate((audio_data, indata), dtype="int16")
 
-            def get_wavdata():
-                b = BytesIO()
-                with soundfile.SoundFile(
-                    file=b, mode="w", format="WAV", subtype="PCM_16", endian="LITTLE", samplerate=int(istream.samplerate), channels=int(istream.channels)
-                ) as sf:
-                    sf.write(audio_data)
-                return b.getvalue()
-
             while not exit:
                 receive()
 
                 if cur_len_s() >= WINDOW_S:
-
-                    # I've tried, but I cannot get good transcription quality without
-                    # recording at a high sample rate, then subsequently downsampling it
-                    # with ffmpeg
-                    fl = load_audio(get_wavdata())
+                    fl = transform_audio(audio_data.copy())
                     start = time.time()
                     with silenced_stderr():
                         tscript = model.transcribe(
