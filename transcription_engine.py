@@ -21,6 +21,7 @@ WAV_FILE = ME.joinpath(".transcript_temp.wav").resolve()
 EMPTY_CUT_TO_S = 5
 SEGMENT_TRAILS_CUT_PAST_S = 0
 WINDOW_S = 2
+MAX_SEGMENT_LENGTH_S = 7
 
 NO_SPEECH_MAX = 0.2
 
@@ -109,7 +110,7 @@ def start(log_queue: multiprocessing.Queue):
                     orig_len = len(audio_data) / istream.samplerate
 
                     if len(tscript["segments"]) > 1:
-                        LOG.debug("Cutting segments!")
+                        LOG.debug("Cutting extra segments!")
                         segment_cutoff = time_to_samples(tscript["segments"][-2]["end"])
                         audio_data = audio_data[segment_cutoff:]
                         prev_text = "".join(
@@ -118,10 +119,10 @@ def start(log_queue: multiprocessing.Queue):
                             if segment["no_speech_prob"] < NO_SPEECH_MAX
                         )
                         log_queue.put({"log": prev_text})
-                    elif all(segment["no_speech_prob"] > 0.3 for segment in tscript["segments"]):
+                    elif all(segment["no_speech_prob"] > NO_SPEECH_MAX for segment in tscript["segments"]):
                         LOG.debug("Cutting empty data")
                         audio_data = audio_data[min(max(0, len(audio_data) - time_to_samples(EMPTY_CUT_TO_S)), len(audio_data)) :]
-                    elif len(tscript["segments"]) == 1 and cur_len_s() - tscript["segments"][0]["end"] > 7:
+                    elif len(tscript["segments"]) == 1 and cur_len_s() - tscript["segments"][0]["end"] > MAX_SEGMENT_LENGTH_S:
                         LOG.debug("Segment is done, cutting")
                         audio_data = audio_data[
                             max(
@@ -139,7 +140,7 @@ def start(log_queue: multiprocessing.Queue):
                     if len(tscript["segments"]) >= 1:
                         cur_text = tscript["segments"][-1]["text"]
                         LOG.info(f"STT {dur}s / LEN {orig_len}s: {cur_text}")
-                        if not all(segment["no_speech_prob"] > 0.3 for segment in tscript["segments"]):
+                        if not all(segment["no_speech_prob"] > NO_SPEECH_MAX for segment in tscript["segments"]):
                             log_queue.put({"stream": cur_text})
                     else:
                         LOG.info(f"STT {dur}s / LEN {orig_len}s: [empty]")
