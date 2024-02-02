@@ -76,7 +76,7 @@ def start(log_queue: multiprocessing.Queue):
         audio_queue.put(indata.copy())
 
     try:
-        with sounddevice.InputStream(callback=audio_callback, latency=1.0, channels=1) as istream:
+        with sounddevice.InputStream(callback=audio_callback, samplerate=16000, dtype="float32", channels=1) as istream:
             LOG.info(f"Readying window ({WINDOW_S} seconds)...")
 
             def time_to_samples(t):
@@ -97,27 +97,20 @@ def start(log_queue: multiprocessing.Queue):
                     except queue.Empty:
                         indata = audio_queue.get()
                         didGetAll = True
-                    audio_data = indata if audio_data is None else numpy.concatenate((audio_data, indata))
-
-            def export_wav(to=str(WAV_FILE)):
-                with soundfile.SoundFile(
-                    file=to, mode="w", samplerate=int(istream.samplerate), channels=int(istream.channels)
-                ) as sf:
-                    sf.write(audio_data)
+                    indata = abs(indata.flatten())
+                    audio_data = indata if audio_data is None else numpy.concatenate((audio_data, indata), dtype="float32")
 
             while not exit:
                 receive()
 
                 if cur_len_s() >= WINDOW_S:
-                    export_wav()
-
-                    fl = whisper.load_audio(str(WAV_FILE))
                     start = time.time()
+                    # This should work the same as the wav-file version but it just doesn't ???? 
                     with silenced_stderr():
                         tscript = model.transcribe(
-                            fl,
+                            audio_data,
                             no_speech_threshold=NO_SPEECH_THRESHOLD,
-                            condition_on_previous_text=False
+                            condition_on_previous_text=False,
                         )
                     dur = round(time.time() - start, 2)
                     orig_len = len(audio_data) / istream.samplerate
