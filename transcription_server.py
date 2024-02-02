@@ -1,6 +1,7 @@
 #!/usr/bin/env python3.9
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from typing import Any
 from util import create_logger, create_filter
 
 import os
@@ -22,7 +23,11 @@ text_log = ""
 text_mtx = threading.Lock()
 
 
-class TranscriptServer(BaseHTTPRequestHandler):
+class TranscriptHandler(BaseHTTPRequestHandler):
+    def log_message(self, format: str, *args: Any) -> None:
+        # Keep the server quiet
+        pass
+    
     def do_GET(self):
         global temp_text
         global text_mtx
@@ -39,13 +44,12 @@ class TranscriptServer(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(VIEW_HTML)
 
-
 web_server_mtx = threading.Lock()
 web_server = None
 def start_server():
     global web_server
     with web_server_mtx:
-        web_server = HTTPServer((HOST_NAME, SERVER_PORT), TranscriptServer)
+        web_server = HTTPServer((HOST_NAME, SERVER_PORT), TranscriptHandler)
         LOG.info("Server started http://%s:%s" % (HOST_NAME, SERVER_PORT))
 
     try:
