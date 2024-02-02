@@ -1,4 +1,5 @@
 #!/usr/bin/env python3.9
+# This module exports now-playing information that can be read by OBS
 
 from subprocess import run, PIPE
 from time import sleep

@@ -9,6 +9,10 @@ from multiprocessing import Process, Queue, Semaphore
     
 
 if __name__ == "__main__":
+    # Queue message format: Dictionary ->
+    #   log:     committed text that won't change anymore
+    #   stream:  streaming text that hasn't finished changing yet
+    #   stop:    if true, we're shutting down
     transcription_queue = Queue()
     nowplaying = Process(target=start_nowplaying)
     transcription = Process(target=start_transcription, args=(transcription_queue,))
