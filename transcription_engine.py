@@ -30,7 +30,7 @@ WINDOW_S = 2
 # Maximum length of a segment before we accept its text and cut it
 MAX_SEGMENT_LENGTH_S = 7
 # The fastest amount of time between updates (lower is more real time but higher CPU)
-MAX_UPDATE_S = 1
+MAX_UPDATE_S = 2
 
 # Probability threshold at which point we consider a segment "empty"
 NO_SPEECH_THRESHOLD = 0.3
@@ -88,7 +88,7 @@ def start(log_queue: multiprocessing.Queue):
                     return 0
                 return len(audio_data) / istream.samplerate
 
-            def receive():
+            def retrieve_audio_data():
                 nonlocal audio_data
                 didGetAll = False
                 while not didGetAll:
@@ -100,14 +100,14 @@ def start(log_queue: multiprocessing.Queue):
                     audio_data = indata if audio_data is None else numpy.concatenate((audio_data, indata), dtype="float32")
 
             last_start = time.time()
-            while not exit:
-                receive()
-                
+            while not exit:                
                 time_since_last = time.time() - last_start
                 if time_since_last < MAX_UPDATE_S:
                     time.sleep(MAX_UPDATE_S - time_since_last)
-
                 last_start = time.time()
+                
+                retrieve_audio_data()
+                
                 if cur_len_s() >= WINDOW_S:
                     flattened = audio_data.copy().flatten()
                     start = time.time()
