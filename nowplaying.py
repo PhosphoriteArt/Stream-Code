@@ -7,21 +7,15 @@ from typing import Optional
 from PIL import Image
 from io import BytesIO
 from abc import ABC, abstractmethod
+from util import create_logger
 import os
 import base64
 import platform
 import daemon
 import asyncio
-import logging
-import sys
 import signal
 
-LOG = logging.getLogger("now-playing")
-LOG.setLevel(logging.DEBUG)
-handler = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-handler.setFormatter(formatter)
-LOG.addHandler(handler)
+LOG = create_logger("now-playing")
 
 HOME = Path.home()
 DEST = HOME.joinpath(".stream")
@@ -38,7 +32,7 @@ ARTWORK_DEFAULT_PATH = ME.joinpath("res", "default_music.png")
 
 exit = False
 def on_term(*_):
-    LOG.info("shutting down now-playing")
+    LOG.info("exiting")
     global exit
     exit = True
 
@@ -269,7 +263,7 @@ def start():
         ARTWORK_PATH.unlink()
     if ALBUM_PATH.exists():
         ALBUM_PATH.unlink()
-    LOG.info("nowplaying shutdown complete")
+    LOG.info("done")
 
 
 if __name__ == "__main__":

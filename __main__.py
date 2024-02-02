@@ -2,8 +2,8 @@
 import signal
 
 from nowplaying import start as start_nowplaying
-from transcription import start as start_transcription
-from tscript_server import start as start_server
+from transcription_engine import start as start_transcription
+from transcription_server import start as start_server
 
 from multiprocessing import Process, Queue, Semaphore
     
@@ -13,12 +13,18 @@ if __name__ == "__main__":
     nowplaying = Process(target=start_nowplaying)
     transcription = Process(target=start_transcription, args=(transcription_queue,))
     server = Process(target=start_server, args=(transcription_queue,))
+
     nowplaying.start()
     transcription.start()
     server.start()
 
-    lck = Semaphore(0)
+    exit_lock = Semaphore(0)
+    quitting = False
     def on_term(*_):
+        global quitting
+        if quitting:
+            return
+        quitting = True
         print("Cleaning up...")
         nowplaying.terminate()
         server.terminate()
@@ -28,8 +34,8 @@ if __name__ == "__main__":
         transcription.join()
 
         transcription_queue.close()
-        lck.release()
+        exit_lock.release()
     
     signal.signal(signal.SIGINT, on_term)
-    lck.acquire()
+    exit_lock.acquire()
     print("Quitting")
