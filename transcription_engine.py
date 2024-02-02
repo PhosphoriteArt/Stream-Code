@@ -56,11 +56,6 @@ def silenced_stderr():
     finally:
         sys.stderr = orig_stderr
 
-
-def transform_audio(data: np.ndarray) -> np.ndarray:
-    return data.flatten().astype(np.float32) / 32768.0
-
-
 def start(log_queue: multiprocessing.Queue):
     global exit
 
@@ -83,7 +78,7 @@ def start(log_queue: multiprocessing.Queue):
         audio_queue.put(indata.copy())
 
     try:
-        with sounddevice.InputStream(callback=audio_callback, dtype="int16", samplerate=SAMPLE_RATE, latency=1.0, channels=1) as istream:
+        with sounddevice.InputStream(callback=audio_callback, dtype="float32", samplerate=SAMPLE_RATE, latency=1.0, channels=1) as istream:
             LOG.info(f"Readying window ({WINDOW_S} seconds)...")
 
             def time_to_samples(t):
@@ -104,17 +99,17 @@ def start(log_queue: multiprocessing.Queue):
                     except queue.Empty:
                         indata = audio_queue.get()
                         didGetAll = True
-                    audio_data = indata if audio_data is None else numpy.concatenate((audio_data, indata), dtype="int16")
+                    audio_data = indata if audio_data is None else numpy.concatenate((audio_data, indata), dtype="float32")
 
             while not exit:
                 receive()
 
                 if cur_len_s() >= WINDOW_S:
-                    fl = transform_audio(audio_data.copy())
+                    flattened = audio_data.copy().flatten()
                     start = time.time()
                     with silenced_stderr():
                         tscript = model.transcribe(
-                            fl,
+                            flattened,
                             no_speech_threshold=NO_SPEECH_THRESHOLD,
                             condition_on_previous_text=False
                         )
