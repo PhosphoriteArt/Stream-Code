@@ -7,7 +7,6 @@ from pathlib import Path
 from contextlib import contextmanager
 from util import create_logger
 from whisper.audio import SAMPLE_RATE
-from io import BytesIO
 
 import multiprocessing
 import sounddevice
@@ -16,10 +15,7 @@ import time
 import queue
 import sys
 import os
-import soundfile
 import signal
-import numpy as np
-import subprocess
 
 LOG = create_logger("transcription-engine")
 
