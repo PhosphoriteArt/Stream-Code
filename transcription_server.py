@@ -1,4 +1,7 @@
 #!/usr/bin/env python3.9
+# This module receives transcription data from the engine and
+# displays it on a javascript-driven page
+
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any

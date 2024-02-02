@@ -1,4 +1,8 @@
 #!/usr/bin/env python3.9
+# This module uses openai-whisper to provide a stream of
+# transcribed text to a multiprocessing queue, to be taken
+# in elsewhere.
+
 from pathlib import Path
 from contextlib import contextmanager
 from util import create_logger
@@ -18,12 +22,20 @@ LOG = create_logger("transcription-engine")
 ME = Path(os.path.dirname(__file__))
 WAV_FILE = ME.joinpath(".transcript_temp.wav").resolve()
 
+# How much buffer we should leave when cutting apparently-empty transcription
 EMPTY_CUT_TO_S = 5
+# How long to cut _past_ a completed segment
 SEGMENT_TRAILS_CUT_PAST_S = 0
+# Minimum amount of audio before we start transcribing
 WINDOW_S = 2
+# Maximum length of a segment before we accept its text and cut it
 MAX_SEGMENT_LENGTH_S = 7
 
-NO_SPEECH_MAX = 0.2
+# Probability threshold at which point we consider a segment "empty"
+NO_SPEECH_THRESHOLD = 0.3
+
+# Whisper model identifier
+MODEL_ID = "base.en"
 
 exit = False
 def on_term(*_):
@@ -52,11 +64,12 @@ def start(log_queue: multiprocessing.Queue):
     with silenced_stderr():
         import whisper
 
-    model = whisper.load_model("base.en", in_memory=True)
+    model = whisper.load_model(MODEL_ID, in_memory=True)
     audio_queue = queue.Queue()
 
     audio_data = None
 
+    # runs on sounddevice's separate thread
     def audio_callback(indata: numpy.ndarray, frames: int, time, status):
         if status:
             LOG.error(status, file=sys.stderr)
@@ -103,26 +116,31 @@ def start(log_queue: multiprocessing.Queue):
                     with silenced_stderr():
                         tscript = model.transcribe(
                             fl,
-                            no_speech_threshold=NO_SPEECH_MAX,
+                            no_speech_threshold=NO_SPEECH_THRESHOLD,
                             condition_on_previous_text=False
                         )
-                    dur = round(time.time() - start, 2)
-                    orig_len = len(audio_data) / istream.samplerate
+                    transcription_time = round(time.time() - start, 2)
+                    audio_data_s = len(audio_data) / istream.samplerate
 
+                    # Find segments that are eligible to be "committed"
+                    #  (i.e. they're old enough/long away enough that they're unlikely to change).
                     if len(tscript["segments"]) > 1:
+                        # Cut old segments
                         LOG.debug("Cutting extra segments!")
                         segment_cutoff = time_to_samples(tscript["segments"][-2]["end"])
                         audio_data = audio_data[segment_cutoff:]
                         prev_text = "".join(
                             segment["text"]
                             for segment in tscript["segments"][:-1]
-                            if segment["no_speech_prob"] < NO_SPEECH_MAX
+                            if segment["no_speech_prob"] < NO_SPEECH_THRESHOLD
                         )
                         log_queue.put({"log": prev_text})
-                    elif all(segment["no_speech_prob"] > NO_SPEECH_MAX for segment in tscript["segments"]):
+                    elif all(segment["no_speech_prob"] > NO_SPEECH_THRESHOLD for segment in tscript["segments"]):
+                        # Cut empty data down to EMPTY_CUT_TO_S
                         LOG.debug("Cutting empty data")
                         audio_data = audio_data[min(max(0, len(audio_data) - time_to_samples(EMPTY_CUT_TO_S)), len(audio_data)) :]
                     elif len(tscript["segments"]) == 1 and cur_len_s() - tscript["segments"][0]["end"] > MAX_SEGMENT_LENGTH_S:
+                        # Cut down a segment where we've stopped talking
                         LOG.debug("Segment is done, cutting")
                         audio_data = audio_data[
                             max(
@@ -133,17 +151,18 @@ def start(log_queue: multiprocessing.Queue):
                                 len(audio_data),
                             ) :
                         ]
-                        if tscript["segments"][0]["no_speech_prob"] < NO_SPEECH_MAX:
+                        if tscript["segments"][0]["no_speech_prob"] < NO_SPEECH_THRESHOLD:
                             log_queue.put({"log": tscript["segments"][0]["text"]})
                         tscript["segments"][0]["text"] = ""
 
+                    # Communicate any text segments to the receiver
                     if len(tscript["segments"]) >= 1:
                         cur_text = tscript["segments"][-1]["text"]
-                        LOG.info(f"STT {dur}s / LEN {orig_len}s: {cur_text}")
-                        if not all(segment["no_speech_prob"] > NO_SPEECH_MAX for segment in tscript["segments"]):
+                        LOG.info(f"Time to transcribe: {transcription_time}s, Audio length: {audio_data_s}s, Transcription: {cur_text}")
+                        if not all(segment["no_speech_prob"] > NO_SPEECH_THRESHOLD for segment in tscript["segments"]):
                             log_queue.put({"stream": cur_text})
                     else:
-                        LOG.info(f"STT {dur}s / LEN {orig_len}s: [empty]")
+                        LOG.info(f"Time to transcribe: {transcription_time}s, Audio length: {audio_data_s}s, Transcription: [empty]")
 
     except KeyboardInterrupt:
         LOG.warn("\nInterrupted by user")
