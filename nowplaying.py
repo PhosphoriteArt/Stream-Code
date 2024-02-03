@@ -170,13 +170,11 @@ class MediaInfoImplWindows(MediaInfo):
 
     @staticmethod
     def _get_artwork_from_stream_ref(reference) -> bytes:
-        from winsdk.windows.storage.streams import Buffer, DataReader
+        from winsdk.windows.storage.streams import Buffer
 
         thumb_read_buffer = Buffer(5 * 1024 * 1024)  # 5MB
         asyncio.run(MediaInfoImplWindows._read_stream_into_buffer(reference, thumb_read_buffer))
-        buffer_reader = DataReader.from_buffer(thumb_read_buffer)
-        byte_buffer = buffer_reader.read_bytes(thumb_read_buffer.length)
-        return byte_buffer
+        return bytes(bytearray(thumb_read_buffer))
 
     def _get_media_info(self):
         return asyncio.run(self._get_media_info_async())
