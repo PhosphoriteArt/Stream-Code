@@ -95,8 +95,7 @@ class MediaInfo(ABC):
 class MediaInfoImplMacOS(MediaInfo):
     def __init__(self) -> None:
         super().__init__()
-        self._nowplaying_cli = ME.joinpath("lib", "nowplaying-cli")
-        self._base_args = [str(self._nowplaying_cli.resolve()), "get"]
+        self._base_args = ["nowplaying-cli", "get"]
 
     @property
     def title(self) -> str:

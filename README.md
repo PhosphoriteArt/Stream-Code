@@ -14,6 +14,9 @@ pip3 install -r requirements.txt
 # On windows, also install winsdk
 pip3 install winsdk
 
+# On mac, also install nowplaying-cli
+brew install nowplaying-cli
+
 # Start all
 python3 .
 ```
