@@ -74,6 +74,9 @@ def start_listener(mp_q: multiprocessing.Queue):
             LOG.info("transcript-reading loop finished")
             return
         with text_mtx:
+            if "clear" in obj and obj['clear']:
+                text_log = ""
+                temp_text = ""
             if "log" in obj:
                 text_log += obj["log"] + "\n"
                 temp_text = ""

@@ -6,13 +6,16 @@ from transcription_engine import start as start_transcription
 from transcription_server import start as start_server
 
 from multiprocessing import Process, Queue, Semaphore
-    
+
+class NonlocalBreak(Exception):
+    pass
 
 if __name__ == "__main__":
     # Queue message format: Dictionary ->
     #   log:     committed text that won't change anymore
     #   stream:  streaming text that hasn't finished changing yet
     #   stop:    if true, we're shutting down
+    #   clear:   clear transcription log
     transcription_queue = Queue()
     nowplaying = Process(target=start_nowplaying)
     transcription = Process(target=start_transcription, args=(transcription_queue,))
@@ -39,7 +42,20 @@ if __name__ == "__main__":
 
         transcription_queue.close()
         exit_lock.release()
+
+        # Escapes the loop below even if we ^C instead of writing 'q'
+        raise NonlocalBreak()
     
     signal.signal(signal.SIGINT, on_term)
+    try:
+        while True:
+            inp = input("Type q and press enter to quit, or clear and enter to clear the log:").strip().lower()
+            if inp == "q":
+                on_term()
+                # on_term will break the loop
+            elif inp == "clear":
+                transcription_queue.put({'clear': True})
+    except NonlocalBreak:
+        pass
     exit_lock.acquire()
     print("Quitting")
